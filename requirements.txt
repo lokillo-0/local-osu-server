@@ -2,7 +2,7 @@ orjson
 aiohttp
 pyimgur
 colorama
-pyttanko
+rosu-pp-py
 pydantic
 colorama
 pyperclip

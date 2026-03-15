@@ -5,7 +5,7 @@ import hashlib
 import colorama
 import subprocess
 from typing import Any
-import pyttanko as oppai
+import rosu_pp_py as rosu
 from typing import Union
 from pathlib import Path
 from colorama import Fore
@@ -37,49 +37,53 @@ Color = Fore
 PP = float
 ACCURACY = float
 SCORE = Union['Score', 'BanchoScore']
+
 def calculator(
-    score: SCORE, bmap: Union['Beatmap', 'ModifiedBeatmap', oppai.beatmap],
-    stars: Optional[oppai.diff_calc] = None
+    score: SCORE, bmap: Union['Beatmap', 'ModifiedBeatmap'],
+    stars: None = None  # kept for API compatibility, unused with rosu-pp-py
 ) -> tuple[PP, ACCURACY]:
-    """PP calculator (easy to work with and change whenever needed)"""
-    if not isinstance(bmap, oppai.beatmap):
-        file = bmap.map_file
+    """PP calculator using rosu-pp-py (modern, accurate osu! pp engine)"""
+
+    if 'BanchoScore' not in str(type(score)):  # avoids merge conflicts
+        map_path = str(bmap.map_file)  # type: ignore
+        mods = int(score.mods)  # type: ignore
+        n300 = int(score.n300)  # type: ignore
+        n100 = int(score.n100)  # type: ignore
+        n50 = int(score.n50)  # type: ignore
+        nmiss = int(score.nmiss)  # type: ignore
+        combo = int(score.max_combo)  # type: ignore
     else:
-        file = bmap
+        map_path = str(bmap.map_file)  # type: ignore
+        mods = int(score.enabled_mods)  # type: ignore
+        n300 = int(score.count300)  # type: ignore
+        n100 = int(score.count100)  # type: ignore
+        n50 = int(score.count50)  # type: ignore
+        nmiss = int(score.countmiss)  # type: ignore
+        combo = int(score.maxcombo)  # type: ignore
 
-    if 'BanchoScore' not in str(type(score)): # avoids merge conflicts
-        if not stars:
-            stars = oppai.diff_calc().calc(file, score.mods) # type: ignore
+    beatmap = rosu.Beatmap(path=map_path)
 
-        pp, *_, acc_percent = oppai.ppv2(
-            aim_stars = stars.aim,
-            speed_stars = stars.speed,
-            bmap = file,
-            mods = score.mods, # type: ignore
-            n300 = score.n300, # type: ignore
-            n100 = score.n100, # type: ignore
-            n50 = score.n50, # type: ignore
-            nmiss = score.nmiss, # type: ignore
-            combo = score.max_combo # type: ignore
-        )
+    perf = rosu.Performance(
+        mods=mods,
+        n300=n300,
+        n100=n100,
+        n50=n50,
+        misses=nmiss,
+        combo=combo,
+    )
+
+    result = perf.calculate(beatmap)
+    pp = float(result.pp)
+
+    # calculate accuracy manually: (300*n300 + 100*n100 + 50*n50) / (300 * total)
+    total = n300 + n100 + n50 + nmiss
+    if total > 0:
+        acc_percent = (300 * n300 + 100 * n100 + 50 * n50) / (300 * total) * 100
     else:
-        mods = int(score.enabled_mods) # type: ignore
-        if not stars:
-            stars = oppai.diff_calc().calc(file, mods)
+        acc_percent = 0.0
 
-        pp, *_, acc_percent = oppai.ppv2(
-            aim_stars = stars.aim,
-            speed_stars = stars.speed,
-            bmap = file,
-            mods = mods,
-            n300 = int(score.count300), # type: ignore
-            n100 = int(score.count100), # type: ignore
-            n50 = int(score.count50), # type: ignore
-            nmiss = int(score.countmiss), # type: ignore
-            combo = int(score.maxcombo) # type: ignore
-        )
-
-        score.pp = pp
+    if 'BanchoScore' in str(type(score)):
+        score.pp = pp  # type: ignore
 
     return (pp, acc_percent)
 
